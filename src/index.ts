@@ -9,6 +9,7 @@ export {
 export {
   CaptchaError,
   CloudOnlyError,
+  InsufficientCreditsError,
   OssOnlyError,
   RateLimitError,
   SERPError,

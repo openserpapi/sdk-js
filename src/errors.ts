@@ -45,6 +45,23 @@ export class CaptchaError extends SERPError {
   }
 }
 
+/**
+ * Thrown on 402 when the account is out of credits. `topupUrl` points at the
+ * dashboard page that accepts card and crypto payments, so an integration can
+ * surface a working link instead of a bare error string.
+ */
+export class InsufficientCreditsError extends SERPError {
+  readonly topupUrl?: string | undefined;
+
+  constructor(message: string, options: ConstructorParameters<typeof SERPError>[1] & {
+    topupUrl?: string | undefined;
+  } = {}) {
+    super(message, options);
+    this.name = "InsufficientCreditsError";
+    this.topupUrl = options.topupUrl;
+  }
+}
+
 export class CloudOnlyError extends SERPError {
   constructor(method: string) {
     super(`${method} is only available against OpenSERP Cloud. Configure apiKey/baseUrl for https://api.openserp.org/v1 or set client.config.backend = "cloud". Get an API key: ${API_KEYS_URL}`);
@@ -88,6 +105,18 @@ export function errorFromResponse(status: number, body: unknown, requestId?: str
 
   if (code === "captcha_detected") {
     return new CaptchaError(message, options);
+  }
+
+  // `insufficient_credits` is a Cloud-only code, absent from the OSS-generated
+  // error enum, so compare as a plain string.
+  if (status === 402 || (code as string) === "insufficient_credits") {
+    // topup_url is Cloud-only, so it is absent from the OSS-generated
+    // ErrorResponse type. Read it defensively rather than widening that type.
+    const topupUrl = (body as { topup_url?: unknown } | null)?.topup_url;
+    return new InsufficientCreditsError(message, {
+      ...options,
+      topupUrl: typeof topupUrl === "string" ? topupUrl : undefined,
+    });
   }
 
   return new SERPError(message, options);
