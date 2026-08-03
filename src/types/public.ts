@@ -162,6 +162,12 @@ export interface ExtractParams {
   clean?: boolean;
   useLlmsTxt?: boolean;
   format?: ResponseFormat;
+  /**
+   * Two-letter country code to extract from, e.g. "US" or "DE". Adds 1 credit
+   * per successfully extracted URL on the hosted API; failed and empty
+   * extractions stay free. Omit to extract at the base rate.
+   */
+  region?: string;
   useProxy?: string;
   proxyUrl?: string;
   proxyCountry?: string;
@@ -169,6 +175,50 @@ export interface ExtractParams {
   proxyProvider?: string;
   proxySessionId?: string;
   tenant?: string;
+}
+
+/**
+ * Extract several URLs in one request. Billing matches calling `extract` once
+ * per URL: successes bill their mode plus any region surcharge, failures and
+ * empty pages are free. A URL that fails becomes an item with an `error`
+ * instead of failing the whole request.
+ */
+export interface BatchExtractParams extends Omit<ExtractParams, "url" | "format"> {
+  /** Up to 20 http(s) URLs. Duplicates and invalid entries are dropped. */
+  urls: string[];
+}
+
+/**
+ * One entry of a batch extraction. On the cloud backend `url` and `error` are
+ * lifted out of `metadata` so callers can branch without digging into it; on
+ * OSS both live in `metadata` only.
+ */
+export type BatchExtractItem = components["schemas"]["BatchExtractItem"] & {
+  url?: string | undefined;
+  error?: string | undefined;
+};
+
+export interface BatchExtractMeta {
+  requested?: number | undefined;
+  succeeded?: number | undefined;
+  failed?: number | undefined;
+}
+
+/**
+ * Cloud batch response. OSS returns a bare `BatchExtractItem[]` (the Open WebUI
+ * loader contract); the cloud wraps it so per-URL billing has somewhere to be
+ * reported. `batchExtract` normalizes both into this shape.
+ */
+export interface BatchExtractResult {
+  /** Cloud only - OSS does not bill, so this is absent there. */
+  billing?:
+    | {
+        credits_used?: number | undefined;
+        credits_remaining?: number | undefined;
+      }
+    | undefined;
+  results?: BatchExtractItem[] | undefined;
+  meta?: BatchExtractMeta | undefined;
 }
 
 export type JsonSearchParams = Omit<SearchParams, "format"> & { format?: "json" };

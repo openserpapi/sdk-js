@@ -202,6 +202,38 @@ const markdown = await client.extract({
 });
 ```
 
+### Batch extract
+
+`batchExtract` takes up to 20 URLs in one request. A URL that fails becomes an item with an `error` instead of failing the whole call, so one dead link never costs you the other results:
+
+```ts
+const batch = await client.batchExtract({
+  urls: [
+    "https://openserp.org/docs",
+    "https://openserp.org/blog",
+  ],
+  mode: "auto",
+});
+
+for (const item of batch.results ?? []) {
+  if (item.error) console.warn(item.url, "failed:", item.error);
+  else console.log(item.url, item.page_content?.slice(0, 120));
+}
+```
+
+On the hosted API, billing is per URL and matches calling `extract` that many times - successful extractions bill their mode, failed and empty ones are free.
+
+### Regions
+
+Pass `region` (a two-letter country code) to extract as a visitor from that country - useful for geo-fenced or localized pages. On the hosted API this adds 1 credit per successfully extracted URL:
+
+```ts
+const page = await client.extract({
+  url: "https://example.com/pricing",
+  region: "DE",
+});
+```
+
 ## Images
 
 ```ts

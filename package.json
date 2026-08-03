@@ -1,6 +1,6 @@
 {
   "name": "@openserp/sdk",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "TypeScript/JavaScript SDK for the OpenSERP self-hosted server and OpenSERP Cloud.",
   "type": "module",
   "license": "MIT",

@@ -153,6 +153,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/extract/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract content from multiple URLs
+         * @description Accepts up to 20 URLs (deduplicated) and returns a bare JSON array of `{page_content, metadata}` items - the shape Open WebUI's external web loader expects. A URL that fails validation or extraction yields an item with `metadata.error` and an empty `page_content` instead of failing the batch. `400` is reserved for malformed requests: empty or oversized `urls`, unknown `mode`, invalid proxy headers.
+         */
+        post: operations["extractBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -603,7 +623,7 @@ export interface components {
         };
         ErrorResponse: {
             /**
-             * @description Stable machine-readable error class. Search-pipeline failures use the following codes: `captcha_detected`, `blocked`, `rate_limited`, `search_timeout`, `proxy_connect`, `proxy_auth`, `proxy_timeout`, `proxy_unavailable`, `parser_failure`, `engine_internal`, `all_engines_failed`, `circuit_open`, `request_timeout`, `request_canceled`. Validation errors use `bad_request`. Other generic codes (`not_found`, `service_unavailable`, `server_error`, `client_error`, `error`) may appear for non-search routes.
+             * @description Stable machine-readable error class. Search-pipeline failures use the following codes: `captcha_detected`, `blocked`, `search_timeout`, `proxy_connect`, `proxy_auth`, `proxy_timeout`, `proxy_unavailable`, `parser_failure`, `engine_internal`, `all_engines_failed`, `circuit_open`, `request_timeout`, `request_canceled`. Validation errors use `bad_request`. Other generic codes (`not_found`, `rate_limited`, `service_unavailable`, `server_error`, `client_error`, `error`) may appear for non-search routes.
              * @example bad_request
              * @enum {string}
              */
@@ -788,6 +808,38 @@ export interface components {
         MegaEnginesResponse: {
             engines: components["schemas"]["MegaEngineInfo"][];
             total: number;
+        };
+        BatchExtractRequest: {
+            /** @description URLs to extract content from (max 20 after deduplication) */
+            urls: string[];
+            /**
+             * @description Extraction mode
+             * @default auto
+             * @enum {string}
+             */
+            mode: "auto" | "fast" | "rendered";
+            /**
+             * @description Article-only extraction (default). Set `false` for whole-readable-body extraction.
+             * @default true
+             */
+            clean: boolean;
+            /**
+             * @description Probe `/llms-full.txt` then `/llms.txt` for site-root URLs and use that markdown instead of scraping HTML.
+             * @default false
+             */
+            use_llms_txt: boolean;
+            /** @description Auto-mode escalation floor, same semantics as `/extract` */
+            min_runes?: number;
+            /** @description Language hint sent as `Accept-Language` on target fetches. The `lang` query parameter works as a fallback. */
+            lang?: string;
+        };
+        BatchExtractItem: {
+            /** @description Extracted markdown content, empty when the item failed */
+            page_content?: string;
+            /** @description Page metadata (source, title, lang, canonical, mode_used, etc.). Failed items carry only `source` and `error`. */
+            metadata?: {
+                [key: string]: string;
+            };
         };
     };
     responses: {
@@ -1634,6 +1686,8 @@ export interface operations {
                     use_llms_txt?: boolean;
                     /** @description Auto-mode escalation floor: if the fast (raw) pass yields fewer extracted-text runes than this, escalate to a browser render. `0` (default) uses the built-in floor. Ignored in `fast` and `rendered` modes. */
                     min_runes?: number;
+                    /** @description Language hint sent as `Accept-Language` on the target fetch. The `lang` query parameter works as a fallback. */
+                    lang?: string;
                 };
             };
         };
@@ -1649,6 +1703,39 @@ export interface operations {
             };
             400: components["responses"]["BadRequestError"];
             502: components["responses"]["BadGatewayError"];
+        };
+    };
+    extractBatch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Request-scoped proxy override. Use `direct` to disable proxy or a tag name to force a specific proxy pool. */
+                "X-Use-Proxy"?: components["parameters"]["UseProxyHeader"];
+                /**
+                 * @description Per-request proxy URL supplied by an upstream balancer. Honored only when `proxies.allow_request_proxy_url: true` is set on the worker; otherwise the request is rejected with `400 bad_request` and `reason=REQUEST_PROXY_URL_DISABLED`. Authenticated SOCKS proxies are rejected in browser mode (`reason=UNSUPPORTED_PROXY_SCHEME`). Credentials are never logged or returned. Precedence: `X-Use-Proxy: direct` > `X-Proxy-URL` > `X-Use-Proxy: <tag>` > per-engine configured tag > `proxies.global` > direct.
+                 * @example http://user:pass@proxy.example:8080
+                 */
+                "X-Proxy-URL"?: components["parameters"]["ProxyURLHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchExtractRequest"];
+            };
+        };
+        responses: {
+            /** @description Batch extraction results, one item per unique URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchExtractItem"][];
+                };
+            };
+            400: components["responses"]["BadRequestError"];
         };
     };
     healthCheck: {

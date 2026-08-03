@@ -2,6 +2,9 @@ import { inferBackend, resolveBaseUrl } from "./backend";
 import { CloudOnlyError, OssOnlyError } from "./errors";
 import { request, type QueryValue } from "./request";
 import type {
+  BatchExtractItem,
+  BatchExtractParams,
+  BatchExtractResult,
   CacheStats,
   CircuitBreakerStatsResponse,
   ExtractParams,
@@ -87,6 +90,61 @@ export class OpenSERP {
   extract(params: ExtractParams): Promise<ExtractResult | string> {
     const { format, ...query } = params;
     return this.get<ExtractResult | string>("/extract", query, format);
+  }
+
+  /**
+   * Extract up to 20 URLs in one request.
+   *
+   * Billing matches calling `extract` once per URL: successful extractions bill
+   * their mode plus any region surcharge, while failed and empty ones are free.
+   * A URL that fails becomes an item with an `error` rather than failing the
+   * whole call, so one dead link never costs you the other results.
+   *
+   * OSS answers with a bare array and the cloud with an envelope; both are
+   * normalized to `BatchExtractResult` here.
+   */
+  async batchExtract(params: BatchExtractParams): Promise<BatchExtractResult> {
+    const { urls, mode, lang, minRunes, clean, useLlmsTxt, region, ...proxyParams } = params;
+    // Proxy/tenant knobs travel as headers on every other endpoint; reuse that
+    // split so batch behaves the same. The rest is the JSON body.
+    const { headers } = splitQueryAndHeaders({ ...proxyParams });
+    const body: Record<string, unknown> = { urls };
+    if (mode !== undefined) body.mode = mode;
+    if (lang !== undefined) body.lang = lang;
+    if (minRunes !== undefined) body.min_runes = minRunes;
+    if (clean !== undefined) body.clean = clean;
+    if (useLlmsTxt !== undefined) body.use_llms_txt = useLlmsTxt;
+    if (region !== undefined) body.region = region;
+
+    const response = await request<BatchExtractResult | BatchExtractItem[]>(
+      this.requestContext(),
+      {
+        method: "POST",
+        path: "/extract/batch",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (Array.isArray(response)) {
+      // OSS bare array - lift metadata.source/error onto the item so callers
+      // see the same shape from both backends.
+      const results = response.map((item) => ({
+        ...item,
+        url: item.metadata?.source,
+        error: item.metadata?.error || undefined,
+      }));
+      const failed = results.filter((item) => item.error).length;
+      return {
+        results,
+        meta: {
+          requested: results.length,
+          succeeded: results.length - failed,
+          failed,
+        },
+      };
+    }
+    return response;
   }
 
   fastSearch(params: Omit<JsonMegaSearchParams, "mode">): Promise<MegaSearchEnvelope>;

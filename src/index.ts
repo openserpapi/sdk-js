@@ -17,6 +17,10 @@ export {
 } from "./errors";
 export type {
   Backend,
+  BatchExtractItem,
+  BatchExtractMeta,
+  BatchExtractParams,
+  BatchExtractResult,
   CacheStats,
   CircuitBreakerStatsResponse,
   DebugEvent,

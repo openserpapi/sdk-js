@@ -267,6 +267,80 @@ describe("OpenSERP", () => {
     ).resolves.toBe("# OpenSERP");
   });
 
+  test("batch extracts several URLs and forwards region on cloud", async () => {
+    server.use(
+      http.post("https://api.openserp.org/v1/extract/batch", async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body.urls).toEqual(["https://a.example", "https://b.example"]);
+        expect(body.mode).toBe("rendered");
+        expect(body.region).toBe("DE");
+        expect(body.min_runes).toBe(400);
+        expect(body.use_llms_txt).toBe(true);
+
+        return HttpResponse.json({
+          billing: { credits_used: 8, credits_remaining: 92 },
+          results: [
+            {
+              url: "https://a.example",
+              page_content: "First page body",
+              metadata: { source: "https://a.example", mode_used: "rendered" },
+            },
+            {
+              url: "https://b.example",
+              page_content: "",
+              error: "fetch failed",
+              metadata: { source: "https://b.example", error: "fetch failed" },
+            },
+          ],
+          meta: { requested: 2, succeeded: 1, failed: 1 },
+        });
+      }),
+    );
+
+    const client = new OpenSERP({ apiKey: "osk_live_test" });
+    const response = await client.batchExtract({
+      urls: ["https://a.example", "https://b.example"],
+      mode: "rendered",
+      region: "DE",
+      minRunes: 400,
+      useLlmsTxt: true,
+    });
+
+    expect(response.meta).toEqual({ requested: 2, succeeded: 1, failed: 1 });
+    expect(response.billing?.credits_used).toBe(8);
+    expect(response.results?.[1]?.error).toBe("fetch failed");
+  });
+
+  // OSS answers with a bare array (its Open WebUI loader contract). The SDK
+  // must present the same shape from both backends.
+  test("normalizes the OSS bare-array batch response", async () => {
+    server.use(
+      http.post("http://localhost:7000/extract/batch", () =>
+        HttpResponse.json([
+          {
+            page_content: "First page body",
+            metadata: { source: "https://a.example", mode_used: "fast" },
+          },
+          {
+            page_content: "",
+            metadata: { source: "https://b.example", error: "timeout" },
+          },
+        ]),
+      ),
+    );
+
+    const client = new OpenSERP();
+    const response = await client.batchExtract({
+      urls: ["https://a.example", "https://b.example"],
+    });
+
+    expect(response.results?.[0]?.url).toBe("https://a.example");
+    expect(response.results?.[0]?.error).toBeUndefined();
+    expect(response.results?.[1]?.url).toBe("https://b.example");
+    expect(response.results?.[1]?.error).toBe("timeout");
+    expect(response.meta).toEqual({ requested: 2, succeeded: 1, failed: 1 });
+  });
+
   test("sends OSS proxy controls as headers", async () => {
     server.use(
       http.get("http://localhost:7000/bing/search", ({ request }) => {
