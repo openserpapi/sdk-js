@@ -30,8 +30,8 @@ export interface Pricing {
   [key: string]: unknown;
 }
 
-export type EngineStatusValue = "operational" | "loaded" | "down" | "unknown";
-export type OverallStatus = "operational" | "degraded" | "down" | "unknown";
+export type EngineStatusValue = "operational" | "loaded" | "down";
+export type OverallStatus = "operational" | "degraded" | "down";
 
 export interface EngineStatus {
   status?: EngineStatusValue;

@@ -8,6 +8,8 @@ export class SERPError extends Error {
   readonly code?: string | undefined;
   readonly reason?: string | undefined;
   readonly requestId?: string | undefined;
+  /** Retry delay in seconds, from Retry-After or the error body. */
+  readonly retryAfter?: number | undefined;
   readonly meta?: Record<string, unknown> | undefined;
   readonly response?: ErrorResponse | unknown | undefined;
 
@@ -16,6 +18,7 @@ export class SERPError extends Error {
     code?: string | undefined;
     reason?: string | undefined;
     requestId?: string | undefined;
+    retryAfter?: number | undefined;
     meta?: Record<string, unknown> | undefined;
     response?: ErrorResponse | unknown | undefined;
     cause?: unknown | undefined;
@@ -26,6 +29,7 @@ export class SERPError extends Error {
     this.code = options.code;
     this.reason = options.reason;
     this.requestId = options.requestId;
+    this.retryAfter = options.retryAfter;
     this.meta = options.meta;
     this.response = options.response;
   }
@@ -86,7 +90,12 @@ export class TimeoutError extends SERPError {
   }
 }
 
-export function errorFromResponse(status: number, body: unknown, requestId?: string): SERPError {
+export function errorFromResponse(
+  status: number,
+  body: unknown,
+  requestId?: string,
+  retryAfter?: string | null,
+): SERPError {
   const data = isErrorResponse(body) ? body : undefined;
   const code = data?.error;
   const message = data?.message ?? `OpenSERP request failed with status ${status}`;
@@ -95,6 +104,7 @@ export function errorFromResponse(status: number, body: unknown, requestId?: str
     code,
     reason: data?.reason,
     requestId: data?.request_id ?? requestId,
+    retryAfter: retryDelay(retryAfter) ?? retryDelay(data?.retry_after),
     meta: data?.meta as Record<string, unknown> | undefined,
     response: body,
   };
@@ -107,12 +117,8 @@ export function errorFromResponse(status: number, body: unknown, requestId?: str
     return new CaptchaError(message, options);
   }
 
-  // `insufficient_credits` is a Cloud-only code, absent from the OSS-generated
-  // error enum, so compare as a plain string.
-  if (status === 402 || (code as string) === "insufficient_credits") {
-    // topup_url is Cloud-only, so it is absent from the OSS-generated
-    // ErrorResponse type. Read it defensively rather than widening that type.
-    const topupUrl = (body as { topup_url?: unknown } | null)?.topup_url;
+  if (status === 402 || code === "insufficient_credits") {
+    const topupUrl = data?.topup_url;
     return new InsufficientCreditsError(message, {
       ...options,
       topupUrl: typeof topupUrl === "string" ? topupUrl : undefined,
@@ -131,4 +137,11 @@ function withSupportHint(message: string): string {
     return message;
   }
   return `${message}${message.endsWith(".") ? "" : "."} ${SUPPORT_HINT}`;
+}
+
+function retryDelay(value: unknown): number | undefined {
+  if (typeof value !== "number" && typeof value !== "string") return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 }

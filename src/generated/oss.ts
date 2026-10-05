@@ -397,7 +397,7 @@ export interface components {
         ResultType: "organic" | "ad" | "featured_snippet" | "knowledge_panel" | "people_also_ask" | "video" | "image" | "news" | "shopping" | "local" | "answer_box" | "ai_summary" | "related_questions" | "related_searches" | "sitelinks" | "videos" | "images_inline" | "calculator" | "weather" | "dictionary";
         Result: {
             /**
-             * @description Stable identifier: `s_` + hex(first 8 bytes of MD5(engine|normalized_url)). Normalized URL: lowercase scheme+host, trailing slash stripped, utm_*\/fbclid/gclid tracking params removed. Same URL → same ID across requests.
+             * @description For usable destination URLs: `s_` + hex(first 8 bytes of MD5(engine|normalized_url)). Plaintext Google redirects are unwrapped before normalization. Normalized URL: lowercase scheme+host, trailing slash stripped, utm_*\/fbclid/gclid tracking params removed. Same usable URL yields the same ID across requests. For wrapped or unusable URLs, a best-effort ID uses visible domain, source name, title and URL breadcrumb instead of the changing redirect token. Without domain or source attribution, it falls back to the normalized URL. Identical attribution can share an ID; changes to attribution or switching to a direct URL can change it.
              * @example s_a1b2c3d4e5f6a1b2
              */
             id: string;

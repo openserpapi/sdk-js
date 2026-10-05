@@ -20,9 +20,23 @@ export type ExtractModeUsed = NonNullable<
   components["schemas"]["ExtractMeta"]["mode_used"]
 >;
 
-export type SearchEnvelope = components["schemas"]["SearchEnvelope"];
-export type MegaSearchEnvelope = components["schemas"]["MegaSearchEnvelope"];
-export type ImageEnvelope = components["schemas"]["ImageEnvelope"];
+export type ResponseMeta = Omit<components["schemas"]["ResponseMeta"], "engines_failed"> & {
+  engines_failed?: string[];
+  engine_used?: string;
+  /** @deprecated May be omitted on Cloud. Use engine_used. */
+  engines_tried?: string[];
+  /** @deprecated May be omitted on Cloud. */
+  engines_skipped?: string[];
+};
+export type SearchEnvelope = Omit<components["schemas"]["SearchEnvelope"], "meta"> & {
+  meta: ResponseMeta;
+};
+export type MegaSearchEnvelope = Omit<components["schemas"]["MegaSearchEnvelope"], "meta"> & {
+  meta: ResponseMeta;
+};
+export type ImageEnvelope = Omit<components["schemas"]["ImageEnvelope"], "meta"> & {
+  meta: ResponseMeta;
+};
 export type ExtractedContent = components["schemas"]["ExtractedContent"];
 export type ExtractResult = components["schemas"]["ExtractResult"];
 export type ExtractHeading = components["schemas"]["ExtractHeading"];
@@ -31,7 +45,13 @@ export type ExtractMeta = components["schemas"]["ExtractMeta"];
 export type SerpFeature = components["schemas"]["SerpFeature"];
 export type FeatureItem = components["schemas"]["FeatureItem"];
 export type FeatureLink = components["schemas"]["FeatureLink"];
-export type ErrorResponse = components["schemas"]["ErrorResponse"];
+export type ErrorResponse = Omit<components["schemas"]["ErrorResponse"], "error"> & {
+  error: components["schemas"]["ErrorResponse"]["error"]
+    | "invalid_request" | "unauthorized" | "insufficient_credits" | "forbidden"
+    | "no_results_available" | "engine_unavailable" | "upstream_timeout" | "internal_error";
+  retry_after?: number;
+  topup_url?: string;
+};
 export type HealthStatus = components["schemas"]["HealthStatus"];
 export type ReadinessStatus = components["schemas"]["ReadinessStatus"];
 export type StatsResponse = components["schemas"]["StatsResponse"];
@@ -112,10 +132,12 @@ export interface SearchParams {
   text?: string;
   lang?: string;
   region?: string;
+  /** Cloud web search: YYYYMMDD..YYYYMMDD, Google and Ecosia only. */
   date?: string;
   file?: string;
   site?: string;
   limit?: number;
+  /** Cloud: result offset; balanced mega requires 0. Unsupported offsets return 400. */
   start?: number;
   filter?: boolean;
   features?: boolean;

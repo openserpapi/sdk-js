@@ -127,9 +127,14 @@ async function requestOnce<T>(
     });
   }
 
-  const body = await readBody(response, options.format);
+  const body = await readBody(response, response.ok ? options.format : undefined);
   if (!response.ok) {
-    throw errorFromResponse(response.status, body, response.headers.get("x-request-id") ?? undefined);
+    throw errorFromResponse(
+      response.status,
+      body,
+      response.headers.get("x-request-id") ?? undefined,
+      response.headers.get("retry-after"),
+    );
   }
 
   return body as T;

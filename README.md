@@ -270,6 +270,29 @@ await client.enginesCapabilities();
 
 The backend is inferred from `baseUrl` and `apiKey`. Pass `backend: "oss"` or `backend: "cloud"` to the constructor to override.
 
+## Cloud engine status
+
+Cloud engine status has `{ engines }` when authenticated and `{ overall }` when anonymous. Engine states are `operational`, `loaded`, and `down`; overall states are `operational`, `degraded`, and `down`. Idle engines retain their last known state.
+
+## Cloud paging and filters
+
+Use `start: 0` for the first page. For later pages, keep `limit: 10` and pass `pagination.next_start` while `pagination.has_more` is true. Google, Bing, and Yandex take offsets in multiples of 10; Baidu supports early pages, Ecosia any offset, and DuckDuckGo only the first page. Unsupported offsets return `400 invalid_request` without charge.
+
+```ts
+const client = new OpenSERP({ apiKey: process.env.OPENSERP_API_KEY });
+const first = await client.search({ engine: "google", text: "openserp", limit: 10 });
+if (first.pagination.has_more) {
+  const next = await client.search({
+    engine: "google", text: "openserp", limit: 10, start: first.pagination.next_start,
+  });
+  console.log(next.results);
+}
+```
+
+Cloud web search accepts publication-date ranges (`date: "20250101..20251231"`) on Google and Ecosia. Malformed ranges and unsupported filters return `400 invalid_request`; change the request before retrying.
+
+`megaSearch` in `balanced` mode rejects `start > 0`. `anySearch` and `fastSearch` forward the offset to compatible engines. Any starts engines in your order, overlapping slow attempts; Fast prioritizes recent health and latency. Use `meta.engine_used` or `client.lastResponse?.engineUsed` for the winner. `engines_tried` and `engines_skipped` may be absent.
+
 ## Telemetry
 
 `client.lastResponse` is updated after each HTTP response:
@@ -277,6 +300,7 @@ The backend is inferred from `baseUrl` and `apiKey`. Pass `backend: "oss"` or `b
 ```ts
 console.log(client.lastResponse?.credits); // Cloud - { used, remaining }
 console.log(client.lastResponse?.engineUsed); // both - X-Engine-Used
+console.log(client.lastResponse?.requestId); // X-Request-Id, also meta.request_id
 console.log(client.lastResponse?.fallbackEngine); // OSS only
 console.log(client.lastResponse?.cache); // OSS only
 ```
@@ -296,7 +320,7 @@ try {
   } else if (err instanceof CaptchaError) {
     // inspect the upstream search failure and retry later
   } else if (err instanceof SERPError) {
-    console.error(err.status, err.code, err.reason, err.requestId);
+    console.error(err.status, err.code, err.reason, err.requestId, err.retryAfter);
   }
 }
 ```
@@ -308,7 +332,7 @@ The SDK does not apply a retry policy. Provide a hook when you want one:
 ```ts
 import { OpenSERP, SERPError } from "@openserp/sdk";
 
-const RETRYABLE = new Set([408, 429, 500, 502, 503]);
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
 
 const client = new OpenSERP({
   apiKey: process.env.OPENSERP_API_KEY,
@@ -316,12 +340,16 @@ const client = new OpenSERP({
     if (attempt >= 2 || !(err instanceof SERPError) || !RETRYABLE.has(err.status)) {
       return false;
     }
-    const wait = Math.min(2 ** attempt * 250, 8_000) + Math.random() * 250;
+    const wait = (err.retryAfter !== undefined
+      ? err.retryAfter * 1000
+      : Math.min(2 ** attempt * 250, 8_000)) + Math.random() * 250;
     await new Promise((r) => setTimeout(r, wait));
     return true;
   },
 });
 ```
+
+`SERPError.retryAfter` is in seconds, read from `Retry-After` or `retry_after`. Cloud `503 engine_unavailable` carries a 60-second delay. Structured errors remain available even when you request Markdown, text, or NDJSON. The SDK makes no automatic retries.
 
 ## Use cases
 
