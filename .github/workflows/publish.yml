@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # npm trusted publishing (OIDC), no NPM_TOKEN
 
 jobs:
   publish:
@@ -23,6 +24,12 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # A tag or GitHub release for a version already on npm is a no-op.
+      - name: Publish unless this version is on npm
+        run: |
+          spec="$(node -p 'const p = require("./package.json"); p.name + "@" + p.version')"
+          if npm view "$spec" version >/dev/null 2>&1; then
+            echo "$spec is already on npm, skipping"
+          else
+            npm publish --access public
+          fi
