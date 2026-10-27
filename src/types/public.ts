@@ -12,6 +12,38 @@ export type Engine =
   | "duckduckgo"
   | "ecosia";
 
+export interface ContextParams {
+  query: string;
+  queries?: string[] | undefined;
+  engines?: Engine[] | undefined;
+  lang?: string | undefined;
+  region?: string | undefined;
+  extractMode?: "auto" | "fast" | "rendered" | undefined;
+  maxSources?: number | undefined;
+  maxFetches?: number | undefined;
+  maxTokens?: number | undefined;
+}
+
+export interface ContextResult {
+  query: string;
+  queries: string[];
+  /** Only this string is bounded by maxTokens (cl100k_base), not the JSON envelope. */
+  context: string;
+  sources: Array<{ id: string; url: string; title: string; fetched_at: string; content_sha256: string }>;
+  citations: Array<{
+    id: string; source_id: string; excerpt: string;
+    /** Zero-based, end-exclusive UTF-8 byte offsets in the exact extracted Markdown. */
+    source_span: { start: number; end: number };
+    score: number; truncated: boolean;
+  }>;
+  failures: Array<{ stage: "search" | "fetch"; code: string; query?: string; url?: string }>;
+  partial: boolean;
+  truncated: boolean;
+  usage: { tokenizer: "cl100k_base"; context_tokens: number; max_tokens: number; searches: number; fetches: number };
+  meta: { request_id: string; took_ms: number };
+  billing?: { credits_used: number; credits_remaining: number };
+}
+
 export type MegaMode = "balanced" | "any" | "fast";
 export type ResponseFormat = "json" | "markdown" | "text" | "ndjson";
 export type NonJsonResponseFormat = Exclude<ResponseFormat, "json">;

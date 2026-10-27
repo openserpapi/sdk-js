@@ -2,6 +2,8 @@ import { inferBackend, resolveBaseUrl } from "./backend";
 import { CloudOnlyError, OssOnlyError } from "./errors";
 import { request, type QueryValue } from "./request";
 import type {
+  ContextParams,
+  ContextResult,
   BatchExtractItem,
   BatchExtractParams,
   BatchExtractResult,
@@ -58,6 +60,21 @@ export class OpenSERP {
 
   get baseUrl() {
     return resolveBaseUrl(this.config);
+  }
+
+  /** Source-backed agent context. Cloud preview requires an admin-tagged account.
+   * Defaults to 100s unless timeoutMs is explicitly configured; never auto-retried.
+   */
+  context(params: ContextParams): Promise<ContextResult> {
+    const { extractMode, maxSources, maxFetches, maxTokens, ...rest } = params;
+    return request<ContextResult>(
+      { ...this.requestContext(), config: { ...this.config, timeoutMs: this.config.timeoutMs ?? 100_000, retry: undefined } },
+      {
+        method: "POST", path: "/context",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...rest, extract_mode: extractMode, max_sources: maxSources, max_fetches: maxFetches, max_tokens: maxTokens }),
+      },
+    );
   }
 
   search(params: JsonSearchParams): Promise<SearchEnvelope>;
