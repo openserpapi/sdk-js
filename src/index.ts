@@ -16,6 +16,8 @@ export {
   TimeoutError,
 } from "./errors";
 export type {
+  ContextParams,
+  ContextResult,
   Backend,
   BatchExtractItem,
   BatchExtractMeta,
