@@ -62,10 +62,11 @@ export class OpenSERP {
     return resolveBaseUrl(this.config);
   }
 
-  /** Source-backed agent context. Cloud preview requires an admin-tagged account.
+  /** Source-backed agent context. Cloud preview, not available on every account yet.
    * Defaults to 100s unless timeoutMs is explicitly configured; never auto-retried.
    */
   context(params: ContextParams): Promise<ContextResult> {
+    this.assertCloud("context");
     const { extractMode, maxSources, maxFetches, maxTokens, ...rest } = params;
     return request<ContextResult>(
       { ...this.requestContext(), config: { ...this.config, timeoutMs: this.config.timeoutMs ?? 100_000, retry: undefined } },

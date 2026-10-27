@@ -1,26 +1,29 @@
 import { expect, test } from "vitest";
-import { OpenSERP } from "../src";
+import { CloudOnlyError, OpenSERP } from "../src";
 
-test.each([
-  { config: { apiKey: "osk_live_test" }, expected: "https://api.openserp.org/v1/context" },
-  { config: { baseUrl: "http://localhost:7000" }, expected: "http://localhost:7000/context" },
-])("context posts JSON on Cloud and OSS and exposes billing ($expected)", async ({ config, expected }) => {
+test("context posts JSON to Cloud and exposes billing", async () => {
   const result = { context: "[c1] Evidence", partial: true, billing: { credits_used: 4, credits_remaining: 96 } };
-  const client = new OpenSERP({ ...config, fetch: async (url, init) => {
-    expect(String(url)).toBe(expected);
+  const client = new OpenSERP({ apiKey: "osk_live_test", fetch: async (url, init) => {
+    expect(String(url)).toBe("https://api.openserp.org/v1/context");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toEqual({ query: "replication", queries: ["DDL"], engines: ["google"], extract_mode: "fast", max_sources: 2, max_fetches: 3, max_tokens: 500 });
     const headers = new Headers(init?.headers);
     expect(headers.get("Content-Type")).toBe("application/json");
-    expect(headers.get("X-Admin-Secret")).toBeNull();
-    if ("apiKey" in config) expect(headers.get("Authorization")).toBe("Bearer osk_live_test");
+    expect(headers.get("Authorization")).toBe("Bearer osk_live_test");
     return Response.json(result, { headers: { "X-Credits-Used": "4", "X-Credits-Remaining": "96" } });
   } });
   expect(await client.context({ query: "replication", queries: ["DDL"], engines: ["google"], extractMode: "fast", maxSources: 2, maxFetches: 3, maxTokens: 500 })).toEqual(result);
   expect(client.lastResponse?.credits?.used).toBe(4);
 });
 
-test("context preserves preview-denied errors and never retries a paid call", async () => {
+test("context is Cloud-only and never calls a self-hosted server", () => {
+  let calls = 0;
+  const client = new OpenSERP({ baseUrl: "http://localhost:7000", fetch: async () => { calls++; return Response.json({}); } });
+  expect(() => client.context({ query: "test" })).toThrow(CloudOnlyError);
+  expect(calls).toBe(0);
+});
+
+test("context preserves 404 errors and never retries a paid call", async () => {
   let calls = 0;
   const client = new OpenSERP({ apiKey: "osk_live_test", retry: () => true, fetch: async () => {
     calls++;

@@ -1,30 +1,5 @@
 # @openserp/sdk
 
-## Agent context preview (0.2.8)
-
-```ts
-import { OpenSERP } from "@openserp/sdk";
-
-const client = new OpenSERP({ apiKey: process.env.OPENSERP_API_KEY });
-const result = await client.context({
-  query: "PostgreSQL logical replication restrictions",
-  queries: ["PostgreSQL replication DDL sequences"],
-  engines: ["google", "bing"], maxTokens: 6000, maxSources: 5, maxFetches: 8,
-});
-console.log(result.context, result.sources, result.billing);
-```
-
-Cloud access is a private preview: the active account owning the API key must
-have the server-managed `admin` tag. Other accounts receive 404; do not pass an
-admin secret. OSS uses the same method against `/context` on a supporting engine.
-The method defaults to a 100-second timeout unless `timeoutMs` is configured and
-does not retry, even when the client has a retry hook. A repeated call may bill again.
-`maxTokens` bounds only `context` in cl100k_base, including citation headers.
-The JSON envelope is outside that budget. Inspect `partial`, `truncated`, and
-`failures`; citation spans are UTF-8 byte offsets in exact extracted Markdown.
-Cloud reserves maximum cost first and bills successful search/extract steps plus
-assembly for nonempty context. Entirely empty context is refunded.
-
 [![npm version](https://img.shields.io/npm/v/@openserp/sdk.svg)](https://www.npmjs.com/package/@openserp/sdk)
 [![npm downloads](https://img.shields.io/npm/dm/@openserp/sdk.svg)](https://www.npmjs.com/package/@openserp/sdk)
 [![license](https://img.shields.io/npm/l/@openserp/sdk.svg)](https://github.com/openserpapi/sdk-js/blob/main/LICENSE.md)
